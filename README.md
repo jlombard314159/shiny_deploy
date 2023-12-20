@@ -29,3 +29,4 @@ https://www.shinyproxy.io/
 
 - Install the R extensions 
 - Some additional R libraries need to be installed if you are using VSCode
+    - `languageserver` package
