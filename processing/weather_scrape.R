@@ -1,4 +1,5 @@
 library(dbplyr)
+library(dplyr)
 
 #SEE: https://wcc.sc.egov.usda.gov/awdbRestApi/swagger-ui.html#/
 
@@ -26,7 +27,7 @@ user_agent <- "Mozilla/5.0 (Windows NT 10.0; Win64; x64)
 #' @export
 query_snotel <- function(duration = "DAILY",
                          num_days = 5,
-                         stations = "*:CO:SNTL",
+                         station = "*:CO:SNTL",
                          element = "WTEQ") {
 
   current_date <- Sys.Date()
@@ -47,19 +48,16 @@ query_snotel <- function(duration = "DAILY",
     returnFlags = "false",
     returnOriginalValues = "false",
     returnSuspectData = "false",
-    stationTriplets = stations
+    stationTriplets = station
   )
-  browser()
+
   ping_api <- httr2::request(snotel_api) %>%
     httr2::req_url_query(!!!params) %>%
-    httr2::req_headers("user-agent" = user_agent) %>%
     httr2::req_perform(.) %>%
     httr2::resp_body_json()
 
   return(ping_api)
 }
-
-##NOTE: currently a bug with the asterisk symbol in station tripelts ( ithin)
 
 #' Query multiple items from SNOTEL
 #'
@@ -69,11 +67,11 @@ query_snotel <- function(duration = "DAILY",
 #' @param elements A vector of values to query the SNOTEL api multiple times
 #' @return A list of lists (JSON)
 #' @export
-query_multiple <- function(elements) {
+query_multiple <- function(elements, ...) {
 
   results <- list()
   for (value in elements){
-    api_result <- query_snotel(element = value)
+    api_result <- query_snotel(element = value, ...)
     results <- append(results, api_result)
   }
 
@@ -94,35 +92,63 @@ query_snotel_meta <- function(station_names) {
 
   meta_api <- "https://wcc.sc.egov.usda.gov/awdbRestApi/services/v1/stations?"
 
+  # convert R vector to the API format
+  station_api <- paste(station_names, collapse = ",")
+
   params <- list(
     activeOnly = "true",
-    stationNames = station_names
+    stationTriplets = station_api
   )
 
   station_ping_api <- httr2::request(meta_api) %>%
     httr2::req_url_query(!!!params) %>%
-    httr2::req_headers("user-agent" = user_agent) %>%
     httr2::req_perform(.) %>%
     httr2::resp_body_json()
 
-  return(station_ping_api)
+  station_df <- dplyr::bind_rows(station_ping_api)
+
+  return(station_df)
 }
 
 
 #' Convert JSON to a pretty dataframe
 #'
-#' xx
+#' Weather data needs to be extracted to be usable. In JSON format
 #'
-#' @param xx
+#' @param A list (JSON) that has measurements for a given set of elements
 #' @return A dataframe of measurements
 #' @export
-format_results <- function() {
+extract_weather <- function(weather_list) {
+
+  final_data <- data.frame()
+  for (element in weather_list) {
+
+    measurements <- dplyr::bind_rows(element$data[[1]]$values)
+
+    output_data <- data.frame("station_name" = element$stationTriplet,
+                              "element" = element$data[[1]]$stationElement$elementCode,
+                              "duration" = element$data[[1]]$stationElement$durationName,
+                              "dates" = measurements$date,
+                              "values" = measurements$value)
+
+    final_data <- rbind(final_data, output_data)
+
+  }
+
+  return(final_data)
 
 }
 
+#------------------------
+#
 
+results <- query_multiple(elements = c("WTEQ", "SNWD", "TAVG"))
 
-test<- 'https://wcc.sc.egov.usda.gov/awdbRestApi/services/v1/data?beginDate=12%2F15%2F2023&centralTendencyType=NONE&duration=DAILY&elements=WTEQ&endDate=12%2F20%2F2023&periodRef=END&returnFlags=false&returnOriginalValues=false&returnSuspectData=false&stationTriplets=*%3ACO%3ASNTL'
+weather_data <- extract_weather(results)
 
-test_response <- httr2::request(test) %>% 
-  httr2::req_perform(.)
+station_data <- query_snotel_meta(unique(weather_data$station_name)) %>%
+  select(c("stationTriplet",
+           "stateCode", "name", "elevation", "latitude", "longitude"))
+
+weather_complete <- weather_data %>%
+  left_join(station_data, by = c("station_name" = "stationTriplet"))
