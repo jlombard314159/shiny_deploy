@@ -5,17 +5,14 @@ library(dplyr)
 
 ## SEE https://www.nrcs.usda.gov/sites/default/files/2023-03/AWDB%20Web%20Service%20User%20Guide.pdf
 
-user_agent <- "Mozilla/5.0 (Windows NT 10.0; Win64; x64) 
-                         AppleWebKit/537.36 (KHTML, like Gecko) 
-                         Chrome/80.0.3987.149 Safari/537.36 
-                         JAL is pinging your API."
-
-
 #' Query the last x days for SNOTEL
 #'
 #' Grab SNOTEL data from a given set of stations for a period of time. NOTE:
 #' there is a limit of 1000 calls ata time so best to run this function
 #' multiple times
+#'
+#' @param date_start Provide a character of dates to start the daa collection
+#' for 
 #'
 #' @param duration Option for the time breakdown of date. valid options are
 #' daily, hourly, semimonthly, monthly
@@ -25,15 +22,16 @@ user_agent <- "Mozilla/5.0 (Windows NT 10.0; Win64; x64)
 #' @param stations
 #' @return A list (JSON) of measurements
 #' @export
-query_snotel <- function(duration = "DAILY",
+query_snotel <- function(date_start, duration = "DAILY",
                          num_days = 5,
                          station = "*:CO:SNTL",
                          element = "WTEQ") {
 
-  current_date <- Sys.Date()
-  begin_date <- current_date - num_days
+  date_start <- as.Date(date_start, format = "%m-%d-%Y")
 
-  current_date <- format(current_date, "%m/%d/%Y")
+  begin_date <- date_start - num_days
+
+  current_date <- format(date_start, "%m/%d/%Y")
   begin_date <- format(begin_date, "%m/%d/%Y")
 
   snotel_api <- "https://wcc.sc.egov.usda.gov/awdbRestApi/services/v1/data?"
@@ -140,9 +138,12 @@ extract_weather <- function(weather_list) {
 }
 
 #------------------------
-#
+# Run the code 
+# TODO: Run multiple years
 
-results <- query_multiple(elements = c("WTEQ", "SNWD", "TAVG"))
+results <- query_multiple(elements = c("WTEQ", "SNWD", "TAVG"),
+                          num_days = 30,
+                          date_start = "12-20-2023")
 
 weather_data <- extract_weather(results)
 
@@ -152,3 +153,5 @@ station_data <- query_snotel_meta(unique(weather_data$station_name)) %>%
 
 weather_complete <- weather_data %>%
   left_join(station_data, by = c("station_name" = "stationTriplet"))
+
+saveRDS(weather_complete, "weather_test.rds")
