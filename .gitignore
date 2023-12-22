@@ -149,3 +149,6 @@ vsCode/
 *.rds
 *.rData
 *.RDS
+.Rproj.user
+
+*.Rproj

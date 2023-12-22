@@ -1,3 +1,3 @@
 library(shiny)
 
-shiny::runApp(launch.browser=TRUE)
+shiny::runApp(launch.browser = TRUE)
